@@ -1,10 +1,9 @@
 #include <ArduinoJson.h>
 
-#include <Adafruit_Sensor.h>
-
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_BME280.h>
+#include <Adafruit_Sensor.h>
 
 #include <Ticker.h>
 #include <lmic.h>
@@ -64,9 +63,16 @@ static bool read_temp_co2(int *co2, int *temp)
 
 Adafruit_BME280 bme;
 
-void bmestart() {
+void bmestart(int pin1, int pin2) {
+  bme.setSampling(Adafruit_BME280::MODE_FORCED, 
+                    Adafruit_BME280::SAMPLING_X1, // temperature 
+                    Adafruit_BME280::SAMPLING_NONE, // pressure 
+                    Adafruit_BME280::SAMPLING_X1, // humidity 
+                    Adafruit_BME280::FILTER_OFF   );
+  
   bool bmestatus;
-  Wire.begin(13,15);
+  //13, 15
+  Wire.begin(pin1, pin2);
   bmestatus = bme.begin(0x76);
       if (!bmestatus) {
         Serial.println("Could not find a valid BME280 sensor, check wiring!");
@@ -129,7 +135,10 @@ const lmic_pinmap lmic_pins = {
 void do_send(osjob_t* j){
     // Payload to send (uplink)
     digitalWrite(2, HIGH);
-         timerWrite(timer, 0); //reset timer (feed watchdog)
+    timerWrite(timer, 0); //reset timer (feed watchdog)
+
+    bme.takeForcedMeasurement();
+    
     int co2, temp;
 
     float Temp = bme.readTemperature();
@@ -232,7 +241,7 @@ void printESPRevision() {
 void setup() {
     Serial.begin(115200);
     pinMode(2, OUTPUT);
-    bmestart();
+    bmestart(13, 15);
     //secondTick.attach(1,wtl);
     timer = timerBegin(0, 80, true);                  //timer 0, div 80
   timerAttachInterrupt(timer, &resetModule, true);  //attach callback
