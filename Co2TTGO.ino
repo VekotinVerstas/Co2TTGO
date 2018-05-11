@@ -147,7 +147,7 @@ void do_send(osjob_t* j){
     
     if (!read_temp_co2(&co2, &temp)) {
         Serial.println("Co2 read failed - Skip send.");
-        retrun
+        return;
     }
         Serial.println("*****************************************************************");
         Serial.print("CO2:");
