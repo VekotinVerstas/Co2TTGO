@@ -145,7 +145,10 @@ void do_send(osjob_t* j){
     float hum = bme.readHumidity();
     
     
-    if (read_temp_co2(&co2, &temp)) {
+    if (!read_temp_co2(&co2, &temp)) {
+        Serial.println("Co2 read failed - Skip send.");
+        retrun
+    }
         Serial.println("*****************************************************************");
         Serial.print("CO2:");
         Serial.println(co2, DEC);
@@ -156,7 +159,7 @@ void do_send(osjob_t* j){
         Serial.print("HUM: ");
         Serial.println(hum, DEC);
         Serial.println("*****************************************************************");
-    }
+    
 
      hum = round(hum);   
      char message[110];
