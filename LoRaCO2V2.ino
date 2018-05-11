@@ -64,12 +64,12 @@ static bool read_temp_co2(int *co2, int *temp)
 Adafruit_BME280 bme;
 
 void bmestart(int pin1, int pin2) {
-  bme.setSampling(Adafruit_BME280::MODE_FORCED, 
+  /*bme.setSampling(Adafruit_BME280::MODE_FORCED, 
                     Adafruit_BME280::SAMPLING_X1, // temperature 
                     Adafruit_BME280::SAMPLING_NONE, // pressure 
                     Adafruit_BME280::SAMPLING_X1, // humidity 
                     Adafruit_BME280::FILTER_OFF   );
-  
+  */
   bool bmestatus;
   //13, 15
   Wire.begin(pin1, pin2);
@@ -137,7 +137,7 @@ void do_send(osjob_t* j){
     digitalWrite(2, HIGH);
     timerWrite(timer, 0); //reset timer (feed watchdog)
 
-    bme.takeForcedMeasurement();
+    //bme.takeForcedMeasurement();
     
     int co2, temp;
 
