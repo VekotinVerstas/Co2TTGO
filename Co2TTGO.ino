@@ -62,6 +62,7 @@ static bool read_temp_co2(int *co2, int *temp)
 }
 
 Adafruit_BME280 bme;
+bool bmestatus;
 
 void bmestart(int pin1, int pin2) {
   /*bme.setSampling(Adafruit_BME280::MODE_FORCED, 
@@ -70,13 +71,11 @@ void bmestart(int pin1, int pin2) {
                     Adafruit_BME280::SAMPLING_X1, // humidity 
                     Adafruit_BME280::FILTER_OFF   );
   */
-  bool bmestatus;
   //13, 15
   Wire.begin(pin1, pin2);
   bmestatus = bme.begin(0x76);
       if (!bmestatus) {
         Serial.println("Could not find a valid BME280 sensor, check wiring!");
-        while (1);
     }
 }
 
@@ -140,10 +139,11 @@ void do_send(osjob_t* j){
     //bme.takeForcedMeasurement();
     
     int co2, temp;
-
-    float Temp = bme.readTemperature();
-    float hum = bme.readHumidity();
-    
+    float Temp=0, hum=0;
+    if (bmestatus) {
+        Temp = bme.readTemperature();
+        hum = bme.readHumidity();      
+    }
     
     if (!read_temp_co2(&co2, &temp)) {
         Serial.println("Co2 read failed - Skip send.");
@@ -160,7 +160,6 @@ void do_send(osjob_t* j){
         Serial.println(hum, DEC);
         Serial.println("*****************************************************************");
     
-
      hum = round(hum);   
      char message[110];
   /*  snprintf(message, sizeof(message), "{\"chipid\":%s,\"sensor\":\"BKS\",\"millis\":%d,\"data\":[\"%s\\
@@ -190,8 +189,7 @@ digitalWrite(2, LOW);
         //LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0);
         Serial.println(F("Sending uplink packet..."));  
     }
-    // Next TX is scheduled after TX_COMPLETE event.
-    
+    // Next TX is scheduled after TX_COMPLETE event.    
 }
 
 void onEvent (ev_t ev) {
@@ -244,7 +242,6 @@ void printESPRevision() {
 void setup() {
     Serial.begin(115200);
     pinMode(2, OUTPUT);
-    bmestart(13, 15);
     //secondTick.attach(1,wtl);
     timer = timerBegin(0, 80, true);                  //timer 0, div 80
   timerAttachInterrupt(timer, &resetModule, true);  //attach callback
@@ -253,6 +250,7 @@ void setup() {
     sensor.begin(9600, SERIAL_8N1, 23, 22);
     delay(1500);   // Give time for the seral monitor to start up
     Serial.println(F("Starting..."));
+    bmestart(13, 15);
 
     //printESPRevision();
 
@@ -262,6 +260,8 @@ void setup() {
     Serial.printf("%08X\n",(uint32_t)chipid);
     sprintf(esp_id, "%08X", (uint32_t)chipid);
 
+    Serial.printf("LORA dev id: 0x%08X\n",(uint64_t)DEVADDR);
+    Serial.printf("LORA dev eui: %01X%01X%01X%01X%01X%01X%01X%01X%01X\n",DEVEUI[0],DEVEUI[1],DEVEUI[2],DEVEUI[3],DEVEUI[4],DEVEUI[5],DEVEUI[6],DEVEUI[7]);
     // Use the Blue pin to signal transmission.
     pinMode(LEDPIN,OUTPUT);
 
