@@ -286,7 +286,7 @@ void setup() {
 
    // reset the OLED
    pinMode(OLED_RESET,OUTPUT);
-   delay(50);
+   //delay(50);
    
     // LMIC init
     os_init();
