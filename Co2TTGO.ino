@@ -3,17 +3,22 @@
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <Adafruit_BME280.h>
-#include <Adafruit_Sensor.h>
 #include <lmic.h>
 #include <hal/hal.h>
-
+#ifdef useBME
+#include <Adafruit_BME280.h>
+#include <Adafruit_Sensor.h>
+Adafruit_BME280 bme;
+bool bmestatus;
+#endif
+#ifdef useDHT
 #include <DHT.h>
 #define DHTPIN 15
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
+#endif
 
-#define SENSOR_USE 0  //if SENSOR_USE is 1, then it uses BME, if 0, it uses DHT
+//#define SENSOR_USE 0  //if SENSOR_USE is 1, then it uses BME, if 0, it uses DHT
 #define LEDPIN 2
 
 #include <Ticker.h>
@@ -24,9 +29,6 @@ const int wdtTimeout = 300000;  //time in ms to trigger the watchdog
 hw_timer_t *timer = NULL;
 
 HardwareSerial sensor(1);
-
-Adafruit_BME280 bme;
-bool bmestatus;
 
 static char esp_id[16];
 unsigned int counter = 0;
@@ -51,9 +53,11 @@ void setup() {
   timerAlarmWrite(timer, wdtTimeout * 1000, false); //set time in us
   timerAlarmEnable(timer);
   sensor.begin(9600, SERIAL_8N1, 23, 22);
+#ifdef useDHT
   dht.begin();
+#endif
   Serial.println(F("Starting..."));
-  //bmestart(13, 15);
+  bmestart(13, 15);
 
   //printESPRevision();
 
@@ -139,11 +143,13 @@ static bool read_temp_co2(int *co2, int *temp) {
 }
 
 void bmestart(int pin1, int pin2) {
+#ifdef useBME
   Wire.begin(pin1, pin2); //13, 15
   bmestatus = bme.begin(0x76);
   if (!bmestatus) {
     Serial.println("Could not find a valid BME280 sensor, check wiring!");
   }
+#endif
 }
 
 void wtl() {
@@ -180,27 +186,28 @@ void do_send(osjob_t* j) {
 
   int co2, temp;
   float Temp, hum;
-  /*if(SENSOR_USE == 1){
-    if (bmestatus) {
-      Temp = bme.readTemperature();
-      hum = bme.readHumidity();*/
-  //}
-  //}
-  //else if (SENSOR_USE == 0) {
 
-  //}
+#ifdef useBME
+  if (bmestatus) {
+    Temp = bme.readTemperature();
+    hum = bme.readHumidity();
+  }
+#endif
+
+#ifdef useDHT
   Temp = dht.readTemperature();
   hum = dht.readHumidity();
-
   if (isnan(Temp) || isnan(hum)) {
     Serial.println("Failed to read from DHT sensor!");
     return;
   }
+#endif
 
   if (!read_temp_co2(&co2, &temp)) {
     Serial.println("Co2 read failed - Skip send.");
     return;
   }
+
   Serial.println("*****************************************************************");
   Serial.print("CO2:");
   Serial.println(co2, DEC);
