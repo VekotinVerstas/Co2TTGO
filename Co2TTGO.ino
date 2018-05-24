@@ -23,7 +23,7 @@ DHT dht(DHTPIN, DHTTYPE);
 #define OLED_I2C_ADDR 0x3C
 #define OLED_RESET 16
 #define OLED_SDA 4
-#define OLED_SCL 15
+//#define OLED_SCL 15
 
 
 HardwareSerial sensor(1);
@@ -269,7 +269,7 @@ void setup() {
     dht.begin();
     //delay(1500);   // Give time for the seral monitor to start up
     Serial.println(F("Starting..."));
-    bmestart(13, 15);
+    //bmestart(13, 15);
 
     //printESPRevision();
 
