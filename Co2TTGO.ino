@@ -30,63 +30,63 @@ HardwareSerial sensor(1);
 
 static bool exchange_command(uint8_t cmd, uint8_t data[], int timeout)
 {
-    // create command buffer
-    uint8_t buf[9];
-    int len = prepare_tx(cmd, data, buf, sizeof(buf));
+  // create command buffer
+  uint8_t buf[9];
+  int len = prepare_tx(cmd, data, buf, sizeof(buf));
 
-    // send the command
-    sensor.write(buf, len);
+  // send the command
+  sensor.write(buf, len);
 
-    // wait for response
-    long start = millis();
-    while ((millis() - start) < timeout) {
-        if (sensor.available() > 0) {
-            uint8_t b = sensor.read();
-            if (process_rx(b, cmd, data)) {
-                return true;
-            }
-        }
+  // wait for response
+  long start = millis();
+  while ((millis() - start) < timeout) {
+    if (sensor.available() > 0) {
+      uint8_t b = sensor.read();
+      if (process_rx(b, cmd, data)) {
+        return true;
+      }
     }
+  }
 
-    return false;
+  return false;
 }
 
 static bool read_temp_co2(int *co2, int *temp)
 {
-    uint8_t data[] = {0, 0, 0, 0, 0, 0};
-    bool result = exchange_command(0x86, data, 3000);
-    if (result) {
-        *co2 = (data[0] << 8) + data[1];
-        *temp = data[2] - 40;
+  uint8_t data[] = {0, 0, 0, 0, 0, 0};
+  bool result = exchange_command(0x86, data, 3000);
+  if (result) {
+    *co2 = (data[0] << 8) + data[1];
+    *temp = data[2] - 40;
 #if 1
-        char raw[32];
-        sprintf(raw, "RAW: %02X %02X %02X %02X %02X %02X", data[0], data[1], data[2], data[3], data[4], data[5]);
-        Serial.println(raw);
+    char raw[32];
+    sprintf(raw, "RAW: %02X %02X %02X %02X %02X %02X", data[0], data[1], data[2], data[3], data[4], data[5]);
+    Serial.println(raw);
 #endif
-    }
-    return result;
+  }
+  return result;
 }
 
 Adafruit_BME280 bme;
 bool bmestatus;
 
 void bmestart(int pin1, int pin2) {
-  /*bme.setSampling(Adafruit_BME280::MODE_FORCED, 
-                    Adafruit_BME280::SAMPLING_X1, // temperature 
-                    Adafruit_BME280::SAMPLING_NONE, // pressure 
-                    Adafruit_BME280::SAMPLING_X1, // humidity 
+  /*bme.setSampling(Adafruit_BME280::MODE_FORCED,
+                    Adafruit_BME280::SAMPLING_X1, // temperature
+                    Adafruit_BME280::SAMPLING_NONE, // pressure
+                    Adafruit_BME280::SAMPLING_X1, // humidity
                     Adafruit_BME280::FILTER_OFF   );
   */
   //13, 15
   Wire.begin(pin1, pin2);
   bmestatus = bme.begin(0x76);
-      if (!bmestatus) {
-        Serial.println("Could not find a valid BME280 sensor, check wiring!");
-    }
+  if (!bmestatus) {
+    Serial.println("Could not find a valid BME280 sensor, check wiring!");
+  }
 }
 
 Ticker secondTick;
-      int wt = 0;
+int wt = 0;
 #include "esp_system.h"
 const int wdtTimeout = 300000;  //time in ms to trigger the watchdog
 hw_timer_t *timer = NULL;
@@ -96,9 +96,9 @@ void IRAM_ATTR resetModule() {
   esp_restart_noos();
 }
 
-void wtl(){
+void wtl() {
   wt++;
-  if (wt == 61200){
+  if (wt == 61200) {
     Serial.println();
     Serial.println("wt reset");
     ESP.restart();
@@ -110,15 +110,17 @@ unsigned int counter = 0;
 
 //SSD1306Wire display (OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
 
- //  rxPin = 9; txPin = 10;
+//  rxPin = 9; txPin = 10;
 
 /*********************************
- * TODO: Change the following keys
- * NwkSKey: network session key, AppSKey: application session key, and DevAddr: end-device address
+   TODO: Change the following keys
+   NwkSKey: network session key, AppSKey: application session key, and DevAddr: end-device address
  *********************************/
 //These are in settings
 
-void os_getDevEui(u1_t* buf){ memcpy_P(buf, DEVEUI, 8); }
+void os_getDevEui(u1_t* buf) {
+  memcpy_P(buf, DEVEUI, 8);
+}
 void os_getArtEui (u1_t* buf) { }
 //void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
@@ -132,113 +134,113 @@ char TTN_response[30];
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
-    .nss = 18,
-    .rxtx = LMIC_UNUSED_PIN,
-    .rst = 14,
-    .dio = {26, 33, 32}  // Pins for the Heltec ESP32 Lora board/ TTGO Lora32 with 3D metal antenna
+  .nss = 18,
+  .rxtx = LMIC_UNUSED_PIN,
+  .rst = 14,
+  .dio = {26, 33, 32}  // Pins for the Heltec ESP32 Lora board/ TTGO Lora32 with 3D metal antenna
 };
-void do_send(osjob_t* j){
-    // Payload to send (uplink)
-    digitalWrite(2, HIGH);
-    timerWrite(timer, 0); //reset timer (feed watchdog)
+void do_send(osjob_t* j) {
+  // Payload to send (uplink)
+  digitalWrite(2, HIGH);
+  timerWrite(timer, 0); //reset timer (feed watchdog)
 
-    //bme.takeForcedMeasurement();
-    
-    int co2, temp;
-    float Temp, hum;
-    /*if(SENSOR_USE == 1){
+  //bme.takeForcedMeasurement();
+
+  int co2, temp;
+  float Temp, hum;
+  /*if(SENSOR_USE == 1){
     if (bmestatus) {
-        Temp = bme.readTemperature();
-        hum = bme.readHumidity();*/      
-    //}
-    //}
-    //else if (SENSOR_USE == 0) {
-      
-    //}
-    Temp = dht.readTemperature();
-    hum = dht.readHumidity();
+      Temp = bme.readTemperature();
+      hum = bme.readHumidity();*/
+  //}
+  //}
+  //else if (SENSOR_USE == 0) {
 
-     if (isnan(Temp) || isnan(hum)) {
+  //}
+  Temp = dht.readTemperature();
+  hum = dht.readHumidity();
+
+  if (isnan(Temp) || isnan(hum)) {
     Serial.println("Failed to read from DHT sensor!");
     return;
   }
-        
-    if (!read_temp_co2(&co2, &temp)) {
-        Serial.println("Co2 read failed - Skip send.");
-        return;
-    }
-        Serial.println("*****************************************************************");
-        Serial.print("CO2:");
-        Serial.println(co2, DEC);
-        Serial.print("TEMP(CO2-sensori)");
-        Serial.println(temp);
-        Serial.print("TEMP: ");
-        Serial.println(Temp);
-        Serial.print("HUM: ");
-        Serial.println(hum, DEC);
-        Serial.println("*****************************************************************");
-    
-     hum = round(hum);   
-     char message[110];
+
+  if (!read_temp_co2(&co2, &temp)) {
+    Serial.println("Co2 read failed - Skip send.");
+    return;
+  }
+  Serial.println("*****************************************************************");
+  Serial.print("CO2:");
+  Serial.println(co2, DEC);
+  Serial.print("TEMP(CO2-sensori)");
+  Serial.println(temp);
+  Serial.print("TEMP: ");
+  Serial.println(Temp);
+  Serial.print("HUM: ");
+  Serial.println(hum, DEC);
+  Serial.println("*****************************************************************");
+
+  hum = round(hum);
+  char message[110];
   /*  snprintf(message, sizeof(message), "{\"chipid\":%s,\"sensor\":\"BKS\",\"millis\":%d,\"data\":[\"%s\\
-",%d,\"_\",0,\"_\",0]}", esp_id, millis(), "co2", co2 );*/
+    ",%d,\"_\",0,\"_\",0]}", esp_id, millis(), "co2", co2 );*/
 
-DynamicJsonBuffer jsonBuffer(200);
-JsonObject& root = jsonBuffer.createObject();
-root["id"] = esp_id;
-root["sensor"] = "BKS";
+  DynamicJsonBuffer jsonBuffer(200);
+  JsonObject& root = jsonBuffer.createObject();
+  root["id"] = esp_id;
+  root["sensor"] = "BKS";
 
-JsonObject& data = root.createNestedObject("data");
-data["co2"] = co2;
-data["temp1"] = temp;
-data["temp2"] = Temp;
-data["hum"] = hum;
+  JsonObject& data = root.createNestedObject("data");
+  data["co2"] = co2;
+  data["temp1"] = temp;
+  data["temp2"] = Temp;
+  data["hum"] = hum;
 
-root.printTo(message);
+  root.printTo(message);
 
-Serial.println(message);
-digitalWrite(2, LOW);
-    // Check if there is not a current TX/RX job running
-    if (LMIC.opmode & OP_TXRXPEND) {
-        Serial.println(F("OP_TXRXPEND, not sending"));
-    } else {
-        // Prepare upstream data transmission at the next possible time.
-        LMIC_setTxData2(1, (uint8_t*)message, strlen(message), 0);
-        //LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0);
-        Serial.println(F("Sending uplink packet..."));  
-    }
-    // Next TX is scheduled after TX_COMPLETE event.    
+  Serial.println(message);
+  digitalWrite(2, LOW);
+  // Check if there is not a current TX/RX job running
+  if (LMIC.opmode & OP_TXRXPEND) {
+    Serial.println(F("OP_TXRXPEND, not sending"));
+  } else {
+    // Prepare upstream data transmission at the next possible time.
+    LMIC_setTxData2(1, (uint8_t*)message, strlen(message), 0);
+    //LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0);
+    Serial.println(F("Sending uplink packet..."));
+  }
+  // Next TX is scheduled after TX_COMPLETE event.
 }
 
 void onEvent (ev_t ev) {
-    if (ev == EV_TXCOMPLETE) {
-        Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
-        if (LMIC.txrxFlags & TXRX_ACK) {
-          Serial.println(F("Received ack"));       
-        }
-        if (LMIC.dataLen) {
-          int i = 0;
-          // data received in rx slot after tx
-          Serial.print(F("Data Received: "));
-          Serial.write(LMIC.frame+LMIC.dataBeg, LMIC.dataLen);
-          Serial.println();
-          
-          for ( i = 0 ; i < LMIC.dataLen ; i++ )
-            TTN_response[i] = LMIC.frame[LMIC.dataBeg+i];
-          TTN_response[i] = 0; 
-          LMIC.dataLen = 0;     
-        }
-        // Schedule next transmission
-        os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
+  if (ev == EV_TXCOMPLETE) {
+    Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
+    if (LMIC.txrxFlags & TXRX_ACK) {
+      Serial.println(F("Received ack"));
     }
+    if (LMIC.dataLen) {
+      int i = 0;
+      // data received in rx slot after tx
+      Serial.print(F("Data Received: "));
+      Serial.write(LMIC.frame + LMIC.dataBeg, LMIC.dataLen);
+      Serial.println();
+
+      for ( i = 0 ; i < LMIC.dataLen ; i++ )
+        TTN_response[i] = LMIC.frame[LMIC.dataBeg + i];
+      TTN_response[i] = 0;
+      LMIC.dataLen = 0;
+    }
+    // Schedule next transmission
+    os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
+  }
 }
 /*
-int getChipRevision()
-{
+  int getChipRevision()
+  {
   return (REG_READ(EFUSE_BLK0_RDATA3_REG) » (EFUSE_RD_CHIP_VER_RESERVE_S)&&EFUSE_RD_CHIP_VER_RESERVE_V) ;
-}
+  }
 
-void printESPRevision() {
+  void printESPRevision() {
   Serial.print("REG_READ(EFUSE_BLK0_RDATA3_REG) ");
   Serial.println(REG_READ(EFUSE_BLK0_RDATA3_REG), BIN);
 
@@ -255,70 +257,70 @@ void printESPRevision() {
 
   Serial.print("Chip Revision from shift Operation ");
   //Serial.println(REG_READ(EFUSE_BLK0_RDATA3_REG) » 15, BIN);
-}
+  }
 */
 void setup() {
-    Serial.begin(115200);
-    pinMode(2, OUTPUT);
-    //secondTick.attach(1,wtl);
-    timer = timerBegin(0, 80, true);                  //timer 0, div 80
+  Serial.begin(115200);
+  pinMode(2, OUTPUT);
+  //secondTick.attach(1,wtl);
+  timer = timerBegin(0, 80, true);                  //timer 0, div 80
   timerAttachInterrupt(timer, &resetModule, true);  //attach callback
   timerAlarmWrite(timer, wdtTimeout * 1000, false); //set time in us
-  timerAlarmEnable(timer);      
-    sensor.begin(9600, SERIAL_8N1, 23, 22);
-    dht.begin();
-    //delay(1500);   // Give time for the seral monitor to start up
-    Serial.println(F("Starting..."));
-    //bmestart(13, 15);
+  timerAlarmEnable(timer);
+  sensor.begin(9600, SERIAL_8N1, 23, 22);
+  dht.begin();
+  //delay(1500);   // Give time for the seral monitor to start up
+  Serial.println(F("Starting..."));
+  //bmestart(13, 15);
 
-    //printESPRevision();
+  //printESPRevision();
 
-    uint64_t chipid;  
-    chipid=ESP.getEfuseMac();
-    Serial.printf("ESP32 Chip ID = %04X",(uint16_t)(chipid>>32));
-    Serial.printf("%08X\n",(uint32_t)chipid);
-    sprintf(esp_id, "%08X", (uint32_t)chipid);
+  uint64_t chipid;
+  chipid = ESP.getEfuseMac();
+  Serial.printf("ESP32 Chip ID = %04X", (uint16_t)(chipid >> 32));
+  Serial.printf("%08X\n", (uint32_t)chipid);
+  sprintf(esp_id, "%08X", (uint32_t)chipid);
 
-    Serial.printf("LORA dev id: 0x%08X\n",(uint64_t)DEVADDR);
-    Serial.printf("LORA dev eui: %01X%01X%01X%01X%01X%01X%01X%01X%01X\n",DEVEUI[0],DEVEUI[1],DEVEUI[2],DEVEUI[3],DEVEUI[4],DEVEUI[5],DEVEUI[6],DEVEUI[7]);
-    // Use the Blue pin to signal transmission.
-    pinMode(LEDPIN,OUTPUT);
+  Serial.printf("LORA dev id: 0x%08X\n", (uint64_t)DEVADDR);
+  Serial.printf("LORA dev eui: %01X%01X%01X%01X%01X%01X%01X%01X%01X\n", DEVEUI[0], DEVEUI[1], DEVEUI[2], DEVEUI[3], DEVEUI[4], DEVEUI[5], DEVEUI[6], DEVEUI[7]);
+  // Use the Blue pin to signal transmission.
+  pinMode(LEDPIN, OUTPUT);
 
-   // reset the OLED
-   pinMode(OLED_RESET,OUTPUT);
-   //delay(50);
-   
-    // LMIC init
-    os_init();
+  // reset the OLED
+  pinMode(OLED_RESET, OUTPUT);
+  //delay(50);
 
-    // Reset the MAC state. Session and pending data transfers will be discarded.
-    LMIC_reset();
+  // LMIC init
+  os_init();
 
-    LMIC_setupChannel(0, 868100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-    LMIC_setupChannel(1, 868300000, DR_RANGE_MAP(DR_SF12, DR_SF7B), BAND_CENTI);      // g-band
-    LMIC_setupChannel(2, 868500000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-    LMIC_setupChannel(3, 867100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-    LMIC_setupChannel(4, 867300000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-    LMIC_setupChannel(5, 867500000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-    LMIC_setupChannel(6, 867700000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-    LMIC_setupChannel(7, 867900000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-    LMIC_setupChannel(8, 868800000, DR_RANGE_MAP(DR_FSK,  DR_FSK),  BAND_MILLI);      // g2-band
+  // Reset the MAC state. Session and pending data transfers will be discarded.
+  LMIC_reset();
 
-    LMIC_setSession (0x1, DEVADDR, NWKSKEY, APPSKEY);
+  LMIC_setupChannel(0, 868100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(1, 868300000, DR_RANGE_MAP(DR_SF12, DR_SF7B), BAND_CENTI);      // g-band
+  LMIC_setupChannel(2, 868500000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(3, 867100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(4, 867300000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(5, 867500000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(6, 867700000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(7, 867900000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(8, 868800000, DR_RANGE_MAP(DR_FSK,  DR_FSK),  BAND_MILLI);      // g2-band
 
-    // Disable link check validation
-    LMIC_setLinkCheckMode(0);
+  LMIC_setSession (0x1, DEVADDR, NWKSKEY, APPSKEY);
 
-    // TTN uses SF9 for its RX2 window.
-    LMIC.dn2Dr = DR_SF9;
+  // Disable link check validation
+  LMIC_setLinkCheckMode(0);
 
-    // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
-    //LMIC_setDrTxpow(DR_SF11,14);
-    LMIC_setDrTxpow(DR_SF9,14);
+  // TTN uses SF9 for its RX2 window.
+  LMIC.dn2Dr = DR_SF9;
 
-    // Start job
-    do_send(&sendjob);
+  // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
+  //LMIC_setDrTxpow(DR_SF11,14);
+  LMIC_setDrTxpow(DR_SF9, 14);
+
+  // Start job
+  do_send(&sendjob);
 }
 void loop() {
-    os_runloop_once();
+  os_runloop_once();
 }
