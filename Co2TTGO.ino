@@ -1,35 +1,110 @@
+#include "settings.h"
+#include "mhz19.h"
 #include <ArduinoJson.h>
-
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_BME280.h>
 #include <Adafruit_Sensor.h>
-
-#include <Ticker.h>
 #include <lmic.h>
 #include <hal/hal.h>
-#include "DHT.h" //library for DHT-sensor
+
+#include <DHT.h>
 #define DHTPIN 15
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 
 #define SENSOR_USE 0  //if SENSOR_USE is 1, then it uses BME, if 0, it uses DHT
-
-#include "settings.h"
-#include "mhz19.h"
-//#include <SSD1306Wire.h>
-//#include <soc/efuse_reg.h>
 #define LEDPIN 2
-#define OLED_I2C_ADDR 0x3C
-#define OLED_RESET 16
-#define OLED_SDA 4
-//#define OLED_SCL 15
 
+#include <Ticker.h>
+Ticker secondTick;
+
+int wt = 0;
+const int wdtTimeout = 300000;  //time in ms to trigger the watchdog
+hw_timer_t *timer = NULL;
 
 HardwareSerial sensor(1);
 
-static bool exchange_command(uint8_t cmd, uint8_t data[], int timeout)
-{
+Adafruit_BME280 bme;
+bool bmestatus;
+
+static char esp_id[16];
+unsigned int counter = 0;
+static osjob_t sendjob;
+
+// Schedule TX every this many seconds (might become longer due to duty
+// cycle limitations).
+const unsigned TX_INTERVAL = 300;
+char TTN_response[30];
+
+void IRAM_ATTR resetModule() {
+  ets_printf("reboot\n");
+  esp_restart_noos();
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(2, OUTPUT);
+  //secondTick.attach(1,wtl);
+  timer = timerBegin(0, 80, true);                  //timer 0, div 80
+  timerAttachInterrupt(timer, &resetModule, true);  //attach callback
+  timerAlarmWrite(timer, wdtTimeout * 1000, false); //set time in us
+  timerAlarmEnable(timer);
+  sensor.begin(9600, SERIAL_8N1, 23, 22);
+  dht.begin();
+  Serial.println(F("Starting..."));
+  //bmestart(13, 15);
+
+  //printESPRevision();
+
+  uint64_t chipid;
+  chipid = ESP.getEfuseMac();
+  Serial.printf("ESP32 Chip ID = %04X", (uint16_t)(chipid >> 32));
+  Serial.printf("%08X\n", (uint32_t)chipid);
+  sprintf(esp_id, "%08X", (uint32_t)chipid);
+
+  Serial.printf("LORA dev id: 0x%08X\n", (uint64_t)DEVADDR);
+  Serial.printf("LORA dev eui: %01X%01X%01X%01X%01X%01X%01X%01X%01X\n", DEVEUI[0], DEVEUI[1], DEVEUI[2], DEVEUI[3], DEVEUI[4], DEVEUI[5], DEVEUI[6], DEVEUI[7]);
+  // Use the Blue pin to signal transmission.
+  pinMode(LEDPIN, OUTPUT);
+
+  // LMIC init
+  os_init();
+
+  // Reset the MAC state. Session and pending data transfers will be discarded.
+  LMIC_reset();
+
+  LMIC_setupChannel(0, 868100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(1, 868300000, DR_RANGE_MAP(DR_SF12, DR_SF7B), BAND_CENTI);      // g-band
+  LMIC_setupChannel(2, 868500000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(3, 867100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(4, 867300000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(5, 867500000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(6, 867700000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(7, 867900000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+  LMIC_setupChannel(8, 868800000, DR_RANGE_MAP(DR_FSK,  DR_FSK),  BAND_MILLI);      // g2-band
+
+  LMIC_setSession (0x1, DEVADDR, NWKSKEY, APPSKEY);
+
+  // Disable link check validation
+  LMIC_setLinkCheckMode(0);
+
+  // TTN uses SF9 for its RX2 window.
+  LMIC.dn2Dr = DR_SF9;
+
+  // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
+  //LMIC_setDrTxpow(DR_SF11,14);
+  LMIC_setDrTxpow(DR_SF9, 14);
+
+  // Start job
+  do_send(&sendjob);
+}
+
+void loop() {
+  os_runloop_once();
+}
+
+static bool exchange_command(uint8_t cmd, uint8_t data[], int timeout) {
   // create command buffer
   uint8_t buf[9];
   int len = prepare_tx(cmd, data, buf, sizeof(buf));
@@ -47,53 +122,28 @@ static bool exchange_command(uint8_t cmd, uint8_t data[], int timeout)
       }
     }
   }
-
   return false;
 }
 
-static bool read_temp_co2(int *co2, int *temp)
-{
+static bool read_temp_co2(int *co2, int *temp) {
   uint8_t data[] = {0, 0, 0, 0, 0, 0};
   bool result = exchange_command(0x86, data, 3000);
   if (result) {
     *co2 = (data[0] << 8) + data[1];
     *temp = data[2] - 40;
-#if 1
     char raw[32];
     sprintf(raw, "RAW: %02X %02X %02X %02X %02X %02X", data[0], data[1], data[2], data[3], data[4], data[5]);
     Serial.println(raw);
-#endif
   }
   return result;
 }
 
-Adafruit_BME280 bme;
-bool bmestatus;
-
 void bmestart(int pin1, int pin2) {
-  /*bme.setSampling(Adafruit_BME280::MODE_FORCED,
-                    Adafruit_BME280::SAMPLING_X1, // temperature
-                    Adafruit_BME280::SAMPLING_NONE, // pressure
-                    Adafruit_BME280::SAMPLING_X1, // humidity
-                    Adafruit_BME280::FILTER_OFF   );
-  */
-  //13, 15
-  Wire.begin(pin1, pin2);
+  Wire.begin(pin1, pin2); //13, 15
   bmestatus = bme.begin(0x76);
   if (!bmestatus) {
     Serial.println("Could not find a valid BME280 sensor, check wiring!");
   }
-}
-
-Ticker secondTick;
-int wt = 0;
-#include "esp_system.h"
-const int wdtTimeout = 300000;  //time in ms to trigger the watchdog
-hw_timer_t *timer = NULL;
-
-void IRAM_ATTR resetModule() {
-  ets_printf("reboot\n");
-  esp_restart_noos();
 }
 
 void wtl() {
@@ -104,33 +154,14 @@ void wtl() {
     ESP.restart();
   }
 }
-static uint8_t mydata[] = "Hello, world!";
-static char esp_id[16];
-unsigned int counter = 0;
-
-//SSD1306Wire display (OLED_I2C_ADDR, OLED_SDA, OLED_SCL);
-
-//  rxPin = 9; txPin = 10;
-
-/*********************************
-   TODO: Change the following keys
-   NwkSKey: network session key, AppSKey: application session key, and DevAddr: end-device address
- *********************************/
-//These are in settings
 
 void os_getDevEui(u1_t* buf) {
   memcpy_P(buf, DEVEUI, 8);
 }
+
 void os_getArtEui (u1_t* buf) { }
-//void os_getDevEui (u1_t* buf) { }
+
 void os_getDevKey (u1_t* buf) { }
-
-static osjob_t sendjob;
-
-// Schedule TX every this many seconds (might become longer due to duty
-// cycle limitations).
-const unsigned TX_INTERVAL = 300;
-char TTN_response[30];
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -139,6 +170,7 @@ const lmic_pinmap lmic_pins = {
   .rst = 14,
   .dio = {26, 33, 32}  // Pins for the Heltec ESP32 Lora board/ TTGO Lora32 with 3D metal antenna
 };
+
 void do_send(osjob_t* j) {
   // Payload to send (uplink)
   digitalWrite(2, HIGH);
@@ -233,94 +265,4 @@ void onEvent (ev_t ev) {
     // Schedule next transmission
     os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
   }
-}
-/*
-  int getChipRevision()
-  {
-  return (REG_READ(EFUSE_BLK0_RDATA3_REG) » (EFUSE_RD_CHIP_VER_RESERVE_S)&&EFUSE_RD_CHIP_VER_RESERVE_V) ;
-  }
-
-  void printESPRevision() {
-  Serial.print("REG_READ(EFUSE_BLK0_RDATA3_REG) ");
-  Serial.println(REG_READ(EFUSE_BLK0_RDATA3_REG), BIN);
-
-  Serial.print("EFUSE_RD_CHIP_VER_RESERVE_S ");
-  Serial.println(EFUSE_RD_CHIP_VER_RESERVE_S, BIN);
-
-  Serial.print("EFUSE_RD_CHIP_VER_RESERVE_V ");
-  Serial.println(EFUSE_RD_CHIP_VER_RESERVE_V, BIN);
-
-  Serial.println();
-
-  Serial.print("Chip Revision (official version): ");
-  Serial.println(getChipRevision());
-
-  Serial.print("Chip Revision from shift Operation ");
-  //Serial.println(REG_READ(EFUSE_BLK0_RDATA3_REG) » 15, BIN);
-  }
-*/
-void setup() {
-  Serial.begin(115200);
-  pinMode(2, OUTPUT);
-  //secondTick.attach(1,wtl);
-  timer = timerBegin(0, 80, true);                  //timer 0, div 80
-  timerAttachInterrupt(timer, &resetModule, true);  //attach callback
-  timerAlarmWrite(timer, wdtTimeout * 1000, false); //set time in us
-  timerAlarmEnable(timer);
-  sensor.begin(9600, SERIAL_8N1, 23, 22);
-  dht.begin();
-  //delay(1500);   // Give time for the seral monitor to start up
-  Serial.println(F("Starting..."));
-  //bmestart(13, 15);
-
-  //printESPRevision();
-
-  uint64_t chipid;
-  chipid = ESP.getEfuseMac();
-  Serial.printf("ESP32 Chip ID = %04X", (uint16_t)(chipid >> 32));
-  Serial.printf("%08X\n", (uint32_t)chipid);
-  sprintf(esp_id, "%08X", (uint32_t)chipid);
-
-  Serial.printf("LORA dev id: 0x%08X\n", (uint64_t)DEVADDR);
-  Serial.printf("LORA dev eui: %01X%01X%01X%01X%01X%01X%01X%01X%01X\n", DEVEUI[0], DEVEUI[1], DEVEUI[2], DEVEUI[3], DEVEUI[4], DEVEUI[5], DEVEUI[6], DEVEUI[7]);
-  // Use the Blue pin to signal transmission.
-  pinMode(LEDPIN, OUTPUT);
-
-  // reset the OLED
-  pinMode(OLED_RESET, OUTPUT);
-  //delay(50);
-
-  // LMIC init
-  os_init();
-
-  // Reset the MAC state. Session and pending data transfers will be discarded.
-  LMIC_reset();
-
-  LMIC_setupChannel(0, 868100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-  LMIC_setupChannel(1, 868300000, DR_RANGE_MAP(DR_SF12, DR_SF7B), BAND_CENTI);      // g-band
-  LMIC_setupChannel(2, 868500000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-  LMIC_setupChannel(3, 867100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-  LMIC_setupChannel(4, 867300000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-  LMIC_setupChannel(5, 867500000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-  LMIC_setupChannel(6, 867700000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-  LMIC_setupChannel(7, 867900000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
-  LMIC_setupChannel(8, 868800000, DR_RANGE_MAP(DR_FSK,  DR_FSK),  BAND_MILLI);      // g2-band
-
-  LMIC_setSession (0x1, DEVADDR, NWKSKEY, APPSKEY);
-
-  // Disable link check validation
-  LMIC_setLinkCheckMode(0);
-
-  // TTN uses SF9 for its RX2 window.
-  LMIC.dn2Dr = DR_SF9;
-
-  // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
-  //LMIC_setDrTxpow(DR_SF11,14);
-  LMIC_setDrTxpow(DR_SF9, 14);
-
-  // Start job
-  do_send(&sendjob);
-}
-void loop() {
-  os_runloop_once();
 }
