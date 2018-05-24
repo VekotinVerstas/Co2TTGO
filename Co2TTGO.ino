@@ -8,7 +8,13 @@
 #include <Ticker.h>
 #include <lmic.h>
 #include <hal/hal.h>
-//#include <DHT.h> //library for DHT-sensor
+#include "DHT.h" //library for DHT-sensor
+#define DHTPIN 15
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+
+#define SENSOR_USE 0  //if SENSOR_USE is 1, then it uses BME, if 0, it uses DHT
+
 #include "settings.h"
 #include "mhz19.h"
 //#include <SSD1306Wire.h>
@@ -139,12 +145,24 @@ void do_send(osjob_t* j){
     //bme.takeForcedMeasurement();
     
     int co2, temp;
-    float Temp=0, hum=0;
+    float Temp, hum;
+    /*if(SENSOR_USE == 1){
     if (bmestatus) {
         Temp = bme.readTemperature();
-        hum = bme.readHumidity();      
-    }
-    
+        hum = bme.readHumidity();*/      
+    //}
+    //}
+    //else if (SENSOR_USE == 0) {
+      
+    //}
+    Temp = dht.readTemperature();
+    hum = dht.readHumidity();
+
+     if (isnan(Temp) || isnan(hum)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+        
     if (!read_temp_co2(&co2, &temp)) {
         Serial.println("Co2 read failed - Skip send.");
         return;
@@ -248,7 +266,8 @@ void setup() {
   timerAlarmWrite(timer, wdtTimeout * 1000, false); //set time in us
   timerAlarmEnable(timer);      
     sensor.begin(9600, SERIAL_8N1, 23, 22);
-    delay(1500);   // Give time for the seral monitor to start up
+    dht.begin();
+    //delay(1500);   // Give time for the seral monitor to start up
     Serial.println(F("Starting..."));
     bmestart(13, 15);
 
