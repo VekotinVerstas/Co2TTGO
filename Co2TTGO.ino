@@ -248,7 +248,7 @@ void setup() {
   timerAlarmWrite(timer, wdtTimeout * 1000, false); //set time in us
   timerAlarmEnable(timer);      
     sensor.begin(9600, SERIAL_8N1, 23, 22);
-    delay(1500);   // Give time for the seral monitor to start up
+    //delay(1500);   // Give time for the seral monitor to start up
     Serial.println(F("Starting..."));
     bmestart(13, 15);
 
@@ -267,7 +267,7 @@ void setup() {
 
    // reset the OLED
    pinMode(OLED_RESET,OUTPUT);
-   delay(50);
+   //delay(50);
    
     // LMIC init
     os_init();
