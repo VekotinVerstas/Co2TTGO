@@ -219,6 +219,8 @@ void do_send(osjob_t* j) {
   Serial.println(hum, DEC);
   Serial.println("*****************************************************************");
 
+  
+  
   hum = round(hum);
   char message[110];
   /*  snprintf(message, sizeof(message), "{\"chipid\":%s,\"sensor\":\"BKS\",\"millis\":%d,\"data\":[\"%s\\
@@ -226,7 +228,7 @@ void do_send(osjob_t* j) {
 
   DynamicJsonBuffer jsonBuffer(200);
   JsonObject& root = jsonBuffer.createObject();
-  root["id"] = esp_id;
+  root["id"] = s_id;
   root["sensor"] = "BKS";
 
   JsonObject& data = root.createNestedObject("data");
