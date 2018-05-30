@@ -3,7 +3,6 @@
 
 #define CMD_SIZE 9 
 
-
 typedef enum {
     START_BYTE,
     COMMAND,
