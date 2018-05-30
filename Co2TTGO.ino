@@ -1,10 +1,14 @@
-#include "settings.h"
+/*
+ * This uses https://github.com/VekotinVerstas/arduino-lmic as lora library. Install it to your arduino/library first.
+ */
+ 
 #include "mhz19.h"
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <lmic.h>
 #include <hal/hal.h>
+#include "settings.h"
 #ifdef useBME
 #include <Adafruit_BME280.h>
 #include <Adafruit_Sensor.h>
@@ -25,7 +29,7 @@ DHT dht(DHTPIN, DHTTYPE);
 Ticker secondTick;
 
 int wt = 0;
-const int wdtTimeout = 300000;  //time in ms to trigger the watchdog
+const int wdtTimeout = 14000;  //time in ms to trigger the watchdog
 hw_timer_t *timer = NULL;
 
 HardwareSerial sensor(1);
@@ -40,6 +44,7 @@ const unsigned TX_INTERVAL = 300;
 char TTN_response[30];
 
 void IRAM_ATTR resetModule() {
+  Serial.print(F("SW watchdog time out: "));
   ets_printf("reboot\n");
   esp_restart_noos();
 }
@@ -48,7 +53,7 @@ void setup() {
   Serial.begin(115200);
   pinMode(2, OUTPUT);
   //secondTick.attach(1,wtl);
-  timer = timerBegin(0, 80, true);                  //timer 0, div 80
+  timer = timerBegin(0, 8000, true);                  //timer 0, div 80
   timerAttachInterrupt(timer, &resetModule, true);  //attach callback
   timerAlarmWrite(timer, wdtTimeout * 1000, false); //set time in us
   timerAlarmEnable(timer);
@@ -56,10 +61,14 @@ void setup() {
 #ifdef useDHT
   dht.begin();
 #endif
-  Serial.println(F("Starting..."));
-  bmestart(13, 15);
 
-  //printESPRevision();
+  bmestart(13, 15);
+  sprintf(s_id, "ESP_%02X", BOXNUM);
+  Serial.print("Co2TTGO name: ");
+  Serial.println(s_id);
+
+  Serial.print("Co2TTGO version: ");
+  Serial.println(version);
 
   uint64_t chipid;
   chipid = ESP.getEfuseMac();
@@ -68,10 +77,10 @@ void setup() {
   sprintf(esp_id, "%08X", (uint32_t)chipid);
 
   Serial.printf("LORA dev id: 0x%08X\n", (uint64_t)DEVADDR);
-  Serial.printf("LORA dev eui: %01X%01X%01X%01X%01X%01X%01X%01X%01X\n", DEVEUI[0], DEVEUI[1], DEVEUI[2], DEVEUI[3], DEVEUI[4], DEVEUI[5], DEVEUI[6], DEVEUI[7]);
+  Serial.printf("LORA dev eui: %01X%01X%01X%01X%01X%01X%01X%01X\n", DEVEUI[0], DEVEUI[1], DEVEUI[2], DEVEUI[3], DEVEUI[4], DEVEUI[5], DEVEUI[6], DEVEUI[7]);
   // Use the Blue pin to signal transmission.
   pinMode(LEDPIN, OUTPUT);
-
+  
   // LMIC init
   os_init();
 
@@ -136,7 +145,7 @@ static bool read_temp_co2(int *co2, int *temp) {
     *co2 = (data[0] << 8) + data[1];
     *temp = data[2] - 40;
     char raw[32];
-    sprintf(raw, "RAW: %02X %02X %02X %02X %02X %02X", data[0], data[1], data[2], data[3], data[4], data[5]);
+    sprintf(raw, "Raw co2 sensor data: %02X %02X %02X %02X %02X %02X", data[0], data[1], data[2], data[3], data[4], data[5]);
     Serial.println(raw);
   }
   return result;
@@ -180,18 +189,18 @@ const lmic_pinmap lmic_pins = {
 void do_send(osjob_t* j) {
   // Payload to send (uplink)
   digitalWrite(2, HIGH);
-  timerWrite(timer, 0); //reset timer (feed watchdog)
+ // timerWrite(timer, 0); //reset timer (feed watchdog)
 
   //bme.takeForcedMeasurement();
 
-  int co2, temp;
-  float Temp, hum;
+  int co2=0, temp=0;
+  float Temp=0, hum=0;
 
 #ifdef useBME
   if (bmestatus) {
     Temp = bme.readTemperature();
     hum = bme.readHumidity();
-  }
+    }
 #endif
 
 #ifdef useDHT
@@ -199,13 +208,16 @@ void do_send(osjob_t* j) {
   hum = dht.readHumidity();
   if (isnan(Temp) || isnan(hum)) {
     Serial.println("Failed to read from DHT sensor!");
-    return;
+    Temp = 0;
+    hum = 0;
   }
 #endif
 
   if (!read_temp_co2(&co2, &temp)) {
-    Serial.println("Co2 read failed - Skip send.");
-    return;
+    Serial.println("Co2 read failed.");
+    co2=0;
+    temp=0;
+    //return;
   }
 
   Serial.println("*****************************************************************");
