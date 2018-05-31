@@ -22,11 +22,7 @@ bool bmestatus;
 DHT dht(DHTPIN, DHTTYPE);
 #endif
 
-//#define SENSOR_USE 0  //if SENSOR_USE is 1, then it uses BME, if 0, it uses DHT
-#define LEDPIN 2
-
-#include <Ticker.h>
-Ticker secondTick;
+#define LEDPIN 2  // Used to blink blue led while sending data
 
 int wt = 0;
 const int wdtTimeout = 14000;  //time in ms to trigger the watchdog
@@ -40,7 +36,7 @@ static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 300;
+const unsigned TX_INTERVAL = 5*60;
 char TTN_response[30];
 
 void IRAM_ATTR resetModule() {
@@ -52,7 +48,6 @@ void IRAM_ATTR resetModule() {
 void setup() {
   Serial.begin(115200);
   pinMode(2, OUTPUT);
-  //secondTick.attach(1,wtl);
   timer = timerBegin(0, 8000, true);                  //timer 0, div 80
   timerAttachInterrupt(timer, &resetModule, true);  //attach callback
   timerAlarmWrite(timer, wdtTimeout * 1000, false); //set time in us
@@ -161,15 +156,6 @@ void bmestart(int pin1, int pin2) {
 #endif
 }
 
-void wtl() {
-  wt++;
-  if (wt == 61200) {
-    Serial.println();
-    Serial.println("wt reset");
-    ESP.restart();
-  }
-}
-
 void os_getDevEui(u1_t* buf) {
   memcpy_P(buf, DEVEUI, 8);
 }
@@ -189,9 +175,7 @@ const lmic_pinmap lmic_pins = {
 void do_send(osjob_t* j) {
   // Payload to send (uplink)
   digitalWrite(2, HIGH);
- // timerWrite(timer, 0); //reset timer (feed watchdog)
-
-  //bme.takeForcedMeasurement();
+  timerWrite(timer, 0); //reset timer (feed watchdog)
 
   int co2=0, temp=0;
   float Temp=0, hum=0;
@@ -231,12 +215,8 @@ void do_send(osjob_t* j) {
   Serial.println(hum, DEC);
   Serial.println("*****************************************************************");
 
-  
-  
   hum = round(hum);
   char message[110];
-  /*  snprintf(message, sizeof(message), "{\"chipid\":%s,\"sensor\":\"BKS\",\"millis\":%d,\"data\":[\"%s\\
-    ",%d,\"_\",0,\"_\",0]}", esp_id, millis(), "co2", co2 );*/
 
   DynamicJsonBuffer jsonBuffer(200);
   JsonObject& root = jsonBuffer.createObject();
@@ -284,6 +264,7 @@ void onEvent (ev_t ev) {
       LMIC.dataLen = 0;
     }
     // Schedule next transmission
+    Serial.println("Schedule next transmission");
     os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
   }
 }
