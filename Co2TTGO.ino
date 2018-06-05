@@ -1,4 +1,6 @@
 /*
+ * TTGOV2 boards GPIO33 must be externaly connected to lora module DIO1 and GPIO32 should be connected to DIO2.
+ * 
  * This uses https://github.com/VekotinVerstas/arduino-lmic as lora library. Install it to your arduino/library first.
  */
  
@@ -22,10 +24,10 @@ bool bmestatus;
 DHT dht(DHTPIN, DHTTYPE);
 #endif
 
-#define LEDPIN 2  // Used to blink blue led while sending data
+#define LEDPIN 2  // Used to blink blue led and to signal watchtog chip that all is well - while sending data
 
 int wt = 0;
-const int wdtTimeout = 14000;  //time in ms to trigger the watchdog
+const int wdtTimeout = 12000;  //time in ms to trigger the watchdog
 hw_timer_t *timer = NULL;
 
 HardwareSerial sensor(1);
@@ -47,7 +49,7 @@ void IRAM_ATTR resetModule() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(2, OUTPUT);
+  
   timer = timerBegin(0, 8000, true);                  //timer 0, div 80
   timerAttachInterrupt(timer, &resetModule, true);  //attach callback
   timerAlarmWrite(timer, wdtTimeout * 1000, false); //set time in us
@@ -174,7 +176,7 @@ const lmic_pinmap lmic_pins = {
 
 void do_send(osjob_t* j) {
   // Payload to send (uplink)
-  digitalWrite(2, HIGH);
+  digitalWrite(LEDPIN, HIGH);
   timerWrite(timer, 0); //reset timer (feed watchdog)
 
   int co2=0, temp=0;
@@ -232,7 +234,7 @@ void do_send(osjob_t* j) {
   root.printTo(message);
 
   Serial.println(message);
-  digitalWrite(2, LOW);
+  digitalWrite(LEDPIN, LOW);
   // Check if there is not a current TX/RX job running
   if (LMIC.opmode & OP_TXRXPEND) {
     Serial.println(F("OP_TXRXPEND, not sending"));
