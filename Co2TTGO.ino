@@ -1,9 +1,9 @@
 /*
- * TTGOV2 boards GPIO33 must be externaly connected to lora module DIO1 and GPIO32 should be connected to DIO2.
- * 
- * This uses https://github.com/VekotinVerstas/arduino-lmic as lora library. Install it to your arduino/library first.
- */
- 
+ *  TTGOV2 boards GPIO33 must be externaly connected to lora module DIO1 and GPIO32 should be connected to DIO2.
+ *
+ *  This uses https://github.com/VekotinVerstas/arduino-lmic as lora library. Install it to your arduino/library first.
+*/
+
 #include "mhz19.h"
 #include <ArduinoJson.h>
 #include <Wire.h>
@@ -38,7 +38,7 @@ static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 5*60;
+const unsigned TX_INTERVAL = 5 * 60;
 char TTN_response[30];
 
 void IRAM_ATTR resetModule() {
@@ -48,8 +48,8 @@ void IRAM_ATTR resetModule() {
 }
 
 void setup() {
+  delay(random (0, 200) ); // Randomise startup time
   Serial.begin(115200);
-  
   timer = timerBegin(0, 8000, true);                  //timer 0, div 80
   timerAttachInterrupt(timer, &resetModule, true);  //attach callback
   timerAlarmWrite(timer, wdtTimeout * 1000, false); //set time in us
@@ -77,7 +77,7 @@ void setup() {
   Serial.printf("LORA dev eui: %01X%01X%01X%01X%01X%01X%01X%01X\n", DEVEUI[0], DEVEUI[1], DEVEUI[2], DEVEUI[3], DEVEUI[4], DEVEUI[5], DEVEUI[6], DEVEUI[7]);
   // Use the Blue pin to signal transmission.
   pinMode(LEDPIN, OUTPUT);
-  
+
   // LMIC init
   os_init();
 
@@ -179,14 +179,14 @@ void do_send(osjob_t* j) {
   digitalWrite(LEDPIN, HIGH);
   timerWrite(timer, 0); //reset timer (feed watchdog)
 
-  int co2=0, temp=0;
-  float Temp=0, hum=0;
+  int co2 = 0, temp = 0;
+  float Temp = 0, hum = 0;
 
 #ifdef useBME
   if (bmestatus) {
     Temp = bme.readTemperature();
     hum = bme.readHumidity();
-    }
+  }
 #endif
 
 #ifdef useDHT
@@ -201,8 +201,8 @@ void do_send(osjob_t* j) {
 
   if (!read_temp_co2(&co2, &temp)) {
     Serial.println("Co2 read failed.");
-    co2=0;
-    temp=0;
+    co2 = 0;
+    temp = 0;
     //return;
   }
 
@@ -267,6 +267,7 @@ void onEvent (ev_t ev) {
     }
     // Schedule next transmission
     Serial.println("Schedule next transmission");
+    Serial.flush();
     os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
   }
 }
